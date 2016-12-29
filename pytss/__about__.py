@@ -26,15 +26,16 @@ from __future__ import unicode_literals
 
 __all__ = [
     "__title__", "__summary__", "__uri__", "__version__", "__author__",
-    "__email__", "__copyright__",
+    "__email__", "__copyright__", "__license__"
 ]
 
 __title__ = "pytss"
 __summary__ = "Python binding to libtspi"
 
-__version__ = "0.1.0"
+__version__ = "0.1.1"
 
 __author__ = "Matthew Garrett"
 __email__ = "matthew.garrett@nebula.com"
 
 __copyright__ = "Copyright 2013 Nebula, Inc"
+__license__ = "Apache License"

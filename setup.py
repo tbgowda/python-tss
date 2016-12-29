@@ -43,7 +43,7 @@ setup(
     version=__about__['__version__'],
 
     description=__about__['__summary__'],
-    license=open('LICENSE').read(),
+    license=__about__['__license__'],
 
     author=__about__['__author__'],
     author_email=__about__['__email__'],
