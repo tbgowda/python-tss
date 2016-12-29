@@ -219,8 +219,20 @@ class TspiHash(TspiObject):
         csig_size = ffi.new("UINT32*")
         csig_data = ffi.new("BYTE**")
         tss_lib.Tspi_Hash_Sign(self.get_handle(), key.get_handle(), csig_size, csig_data)
-        return ffi.buffer(csig_data[0], csig_size[0])
+        ret = bytearray(csig_data[0][0:csig_size[0]])
+        tss_lib.Tspi_Context_FreeMemory(self.context, csig_data[0])
+        return ret
 
+    def get_digest(self):
+        """
+        Get the hash value of this object
+        """
+        digest_len = ffi.new('UINT32 *')
+        digest = ffi.new('BYTE **')
+        tss_lib.Tspi_Hash_GetHashValue(self.get_handle(), digest_len, digest)
+        ret = bytearray(digest[0][0:digest_len[0]])
+        tss_lib.Tspi_Context_FreeMemory(self.context, digest[0])
+        return ret
 
 class TspiKey(TspiObject):
     def __init__(self, context, flags, handle=None):
@@ -264,6 +276,12 @@ class TspiKey(TspiObject):
         return self.get_attribute_data(tss_lib.TSS_TSPATTRIB_KEY_BLOB,
                                        tss_lib.TSS_TSPATTRIB_KEYBLOB_PUBLIC_KEY)
 
+    def create_key(self, parentKey, pcr):
+        """
+        Create this key given the parent key
+        """
+        tss_lib.Tspi_Key_CreateKey(self.get_handle(), parentKey.get_handle(), pcr)
+
     def get_pubkey(self):
         """
         Obtain the public part of the key
@@ -273,6 +291,14 @@ class TspiKey(TspiObject):
         return self.get_attribute_data(tss_lib.TSS_TSPATTRIB_RSAKEY_INFO,
                                        tss_lib.TSS_TSPATTRIB_KEYINFO_RSA_MODULUS)
 
+    def get_pubkey_exponent(self):
+        """
+        Obtain the public exponent part of the key
+
+        :returns: a bytearray containing the exponent of the key
+        """
+        return self.get_attribute_data(tss_lib.TSS_TSPATTRIB_RSAKEY_INFO,
+                                       tss_lib.TSS_TSPATTRIB_KEYINFO_RSA_EXPONENT)
 
     def seal(self, data, pcrs=None):
         """
@@ -294,12 +320,11 @@ class TspiKey(TspiObject):
         else:
             pcr_composite = 0
 
-        cdata = ffi.new('BYTE[]', len(data))
-        for i in range(len(data)):
-            cdata[i] = data[i]
+        clen = ffi.cast('UINT32', len(data))
+        cdata = _c_byte_array(data)
 
         tss_lib.Tspi_Data_Seal(encdata.get_handle(), self.get_handle(),
-                               len(data), cdata, pcr_composite)
+                               clen, cdata, pcr_composite)
         blob = encdata.get_attribute_data(tss_lib.TSS_TSPATTRIB_ENCDATA_BLOB,
                                     tss_lib.TSS_TSPATTRIB_ENCDATABLOB_BLOB)
         return bytearray(blob)
@@ -452,6 +477,35 @@ class TspiTPM(TspiObject):
         """
         tss_lib.Tspi_TPM_TakeOwnership(self.get_handle(), srk.get_handle(), 0)
 
+    def get_pub_srk_key(self):
+        """
+        Get the public portion of the SRK
+
+        :returns: public portion of SRK and its length
+        """
+        buf = ffi.new('BYTE **')
+        buf_len = ffi.new('UINT32 *')
+        tss_lib.Tspi_TPM_OwnerGetSRKPubKey(self.get_handle(), buf_len, buf) 
+        srk_len = buf_len[0]
+        srk = bytearray(buf[0][0:srk_len])
+        tss_lib.Tspi_Context_FreeMemory(self.context, buf[0])
+        return srk, srk_len
+
+    def get_pcr(self, pcr):
+        """
+        Get the value of the PCR
+
+        :param pcr: The PCR to read
+
+        :returns: PCR value
+        """
+        buf = ffi.new('BYTE **')
+        buf_len = ffi.new('UINT32 *')
+        tss_lib.Tspi_TPM_PcrRead(self.get_handle(), pcr, buf_len, buf)
+        pcrs = bytearray(buf[0][0:buf_len[0]])
+        tss_lib.Tspi_Context_FreeMemory(self.context, buf[0])
+        return pcrs
+
     def extend_pcr(self, pcr, data, event):
         """
         Extend a PCR
@@ -472,6 +526,22 @@ class TspiTPM(TspiObject):
                                    ffi.NULL, bloblen, blob)
         ret = bytearray(blob[0][0:bloblen[0]])
         tss_lib.Tspi_Context_FreeMemory(self.context, blob[0])
+        return ret
+
+    def get_random(self, length):
+        """
+        Generate random number
+
+        :param length: Length of the generated random number
+
+        :returns: A bytearray containing the random number
+        """
+        random_len = ffi.cast('UINT32', length)
+        random_num = ffi.new('BYTE **')
+
+        tss_lib.Tspi_TPM_GetRandom(self.get_handle(), random_len, random_num)
+        ret = bytearray(random_num[0][0:length])
+        tss_lib.Tspi_Context_FreeMemory(self.context, random_num[0])
         return ret
 
 class TspiContext():
@@ -582,6 +652,21 @@ class TspiContext():
     def get_tpm_object(self):
         """Returns the TspiTPM associated with this context"""        
         return self.tpm
+
+    def register_key(self, key, key_storage_type, key_uuid, parent_storage_type, parent_uuid):
+        """
+        Register this key given the parent key
+
+        :param key: The key to store in persistent storage
+        :param key_storage_type: Storage type of this key
+        :param key_uuid: The UUID used to identify this key
+        :param parent_storage_type: Storage type of the parent key
+        :param parent_uuid: The UUID used to identify the parent key
+
+        """
+        tss_key_uuid = uuid_to_tss_uuid(key_uuid)
+        tss_parent_uuid = uuid_to_tss_uuid(parent_uuid)
+        tss_lib.Tspi_Context_RegisterKey(self.context, key.get_handle(), key_storage_type, tss_key_uuid, parent_storage_type, tss_parent_uuid)
 
 
 def _c_byte_array(data):
