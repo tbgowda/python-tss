@@ -84,6 +84,19 @@ class TspiObject(object):
         tss_lib.Tspi_Context_FreeMemory(self.context, blob[0])
         return ret
 
+    def get_attribute_uint32(self, attrib, sub):
+        """
+        Get a 32 bit arbitrary datatype associated with the object
+
+        :param attrib: The attribute to modify
+        :param sub: The subattribute to modify
+
+        :returns: a bytearray containing the data
+        """
+        attribute = ffi.new('UINT32 *')
+        tss_lib.Tspi_GetAttribUint32(self.handle[0], attrib, sub, attribute)
+        return attribute[0]
+
     def get_policy_object(self, poltype):
         """
         Get a policy object assigned to the object
@@ -168,7 +181,7 @@ class TspiPCRs(TspiObject):
         :param pcrs: A list of integer PCRs
         """
         for pcr in pcrs:
-            tss_lib.Tspi_PcrComposite_SelectPcrIndex(self.handle[0], pcr)
+            tss_lib.Tspi_PcrComposite_SelectPcrIndex(self.handle[0], ffi.cast('UINT32',pcr))
             self.pcrs[pcr] = ""
 
     def get_pcrs(self):
@@ -241,14 +254,6 @@ class TspiKey(TspiObject):
                                       tss_lib.TSS_OBJECT_TYPE_RSAKEY,
                                       flags, handle)
 
-    def __del__(self):
-        try:
-            tss_lib.Tspi_Key_UnloadKey(self.get_handle())
-        # The key may have been implicitly unloaded as part of a previous
-        # operation
-        except tspi_exceptions.TSS_E_INVALID_HANDLE:
-            pass
-
     def set_modulus(self, n):
         """
         Set the key modulus
@@ -299,6 +304,51 @@ class TspiKey(TspiObject):
         """
         return self.get_attribute_data(tss_lib.TSS_TSPATTRIB_RSAKEY_INFO,
                                        tss_lib.TSS_TSPATTRIB_KEYINFO_RSA_EXPONENT)
+
+    def bind(self, data):
+        """
+        Bind data to the local TPM using this key
+
+        :param data: The data to bind
+
+        :returns: a bytearray of the encrypted data
+        """
+        encdata = TspiObject(self.context, 'TSS_HENCDATA *',
+                             tss_lib.TSS_OBJECT_TYPE_ENCDATA,
+                             tss_lib.TSS_ENCDATA_BIND)
+
+        clen = ffi.cast('UINT32', len(data))
+        cdata = _c_byte_array(data)
+
+        tss_lib.Tspi_Data_Bind(encdata.get_handle(), self.get_handle(),
+                               clen, cdata)
+        blob = encdata.get_attribute_data(tss_lib.TSS_TSPATTRIB_ENCDATA_BLOB,
+                                    tss_lib.TSS_TSPATTRIB_ENCDATABLOB_BLOB)
+        return bytearray(blob)
+
+    def unbind(self, data):
+        """
+        Unbind data from the local TPM using this key
+
+        :param data: The data to unbind
+
+        :returns: a bytearray of the unencrypted data
+        """
+        encdata = TspiObject(self.context, 'TSS_HENCDATA *',
+                             tss_lib.TSS_OBJECT_TYPE_ENCDATA,
+                             tss_lib.TSS_ENCDATA_BIND)
+
+        encdata.set_attribute_data(tss_lib.TSS_TSPATTRIB_ENCDATA_BLOB,
+                                tss_lib.TSS_TSPATTRIB_ENCDATABLOB_BLOB, data)
+
+        bloblen = ffi.new('UINT32 *')
+        blob = ffi.new('BYTE **')
+
+        tss_lib.Tspi_Data_Unbind(encdata.get_handle(), self.get_handle(),
+                                 bloblen, blob)
+        ret = bytearray(blob[0][0:bloblen[0]])
+        tss_lib.Tspi_Context_FreeMemory(self.context, blob[0])
+        return ret
 
     def seal(self, data, pcrs=None):
         """
@@ -627,6 +677,22 @@ class TspiContext():
         tss_key = ffi.new('TSS_HKEY *')
         tss_uuid = uuid_to_tss_uuid(uuid)
         tss_lib.Tspi_Context_LoadKeyByUUID(self.context, storagetype, tss_uuid,
+                                       tss_key)
+        key = TspiKey(self.context, None, handle=tss_key)
+        return key
+
+    def get_key_by_uuid(self, storagetype, uuid):
+        """
+        Get a key that's been registered in persistent storage
+
+        :param storagetype: The key storage type
+        :param uuid: The UUID associated with the key
+
+        :returns: a TspiKey
+        """
+        tss_key = ffi.new('TSS_HKEY *')
+        tss_uuid = uuid_to_tss_uuid(uuid)
+        tss_lib.Tspi_Context_GetKeyByUUID(self.context, storagetype, tss_uuid,
                                        tss_key)
         key = TspiKey(self.context, None, handle=tss_key)
         return key
