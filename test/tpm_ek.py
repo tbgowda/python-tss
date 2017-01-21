@@ -5,8 +5,6 @@ from pytss import *
 from pytss.tspi_exceptions import *
 from pytss.tspi_defines import *
 
-well_known_secret = bytearray([0] * 20)
-
 if __name__ == "__main__":
 
     context = TspiContext()
@@ -14,9 +12,11 @@ if __name__ == "__main__":
 
     tpm = context.get_tpm_object()
 
-    srk = context.create_rsa_key(TSS_KEY_TSP_SRK)
-
+    ek = tpm.get_pub_endorsement_key()
     try:
-        tpm.take_ownership(srk)
+        with open('key.bin.enc', 'r') as bindedFile:
+		unbindedDataRaw = bytearray(bindedFile.read())
+		unbindedData = bindKey.unbind(unbindedDataRaw)
+	print unbindedData	
     except tspi_exceptions.TPM_E_DISABLED_CMD:
         print "DISABLED"      

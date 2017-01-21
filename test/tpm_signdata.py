@@ -9,8 +9,8 @@ from pytss.tspi_defines import *
 
 well_known_secret = bytearray([0] * 20)
 srk_uuid = uuid.UUID('{00000000-0000-0000-0000-000000000001}')
-signKey_uuid = uuid.UUID('{00000000-0000-0000-0000-000000001000}')
-signSecondKey_uuid = uuid.UUID('{00000000-0000-0000-0000-000000002000}') # This should be created in tpm_createkey.py
+signKey_uuid = uuid.UUID('{60ac85dc-2bf9-4803-b761-f819a14d7486}')
+signSecondKey_uuid = uuid.UUID('{00000000-0000-0000-0000-000000002000}')
 
 if __name__ == "__main__":
 
@@ -19,15 +19,10 @@ if __name__ == "__main__":
 	context.connect()
 
 	tpm = context.get_tpm_object()
-	tpmpolicy = tpm.get_policy_object(TSS_POLICY_USAGE)
-	tpmpolicy.set_secret(TSS_SECRET_MODE_SHA1, well_known_secret)
 
 	srk = context.load_key_by_uuid(TSS_PS_TYPE_SYSTEM, srk_uuid)
-	keypolicy = srk.get_policy_object(TSS_POLICY_USAGE)
-	keypolicy.set_secret(TSS_SECRET_MODE_SHA1, well_known_secret)
 
 	signKey = context.load_key_by_uuid(TSS_PS_TYPE_SYSTEM, signKey_uuid)
-	signSecondKey = context.load_key_by_uuid(TSS_PS_TYPE_SYSTEM, signSecondKey_uuid)
 
 	pubKey = signKey.get_pubkey()
 	pubKeyExponent = signKey.get_pubkey_exponent()

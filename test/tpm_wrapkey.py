@@ -1,13 +1,13 @@
 #!/usr/bin/python
-'''
-DOESNOT WORK YET, DO NOT USE
-'''
+
 import sys
 import binascii
 import uuid
 from pytss import *
 from pytss.tspi_exceptions import *
 from pytss.tspi_defines import *
+
+# NOT COMPLETE !!!
 
 well_known_secret = bytearray([0] * 20)
 srk_uuid = uuid.UUID('{00000000-0000-0000-0000-000000000001}')
