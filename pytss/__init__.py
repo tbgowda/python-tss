@@ -566,7 +566,7 @@ class TspiTPM(TspiObject):
 
         :returns: A bytearray containing the new PCR value
         """
-        cdata = ffi.new('BYTE []', len(data))
+        cdata = _c_byte_array(data)
         bloblen = ffi.new('UINT32 *')
         blob = ffi.new('BYTE **')
         for i in range(len(data)):
