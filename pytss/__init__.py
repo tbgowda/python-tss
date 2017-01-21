@@ -569,8 +569,6 @@ class TspiTPM(TspiObject):
         cdata = _c_byte_array(data)
         bloblen = ffi.new('UINT32 *')
         blob = ffi.new('BYTE **')
-        for i in range(len(data)):
-            cdata[i] = data[i]
 
         tss_lib.Tspi_TPM_PcrExtend(self.get_handle(), pcr, len(data), cdata,
                                    ffi.NULL, bloblen, blob)
