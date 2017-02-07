@@ -63,9 +63,7 @@ class TspiObject(object):
         :param sub: The subattribute to modify
         :param val: The data to assign
         """
-        cdata = ffi.new('BYTE[]', len(data))
-        for i in range(len(data)):
-            cdata[i] = data[i]
+	cdata = _c_byte_array(data)
         tss_lib.Tspi_SetAttribData(self.get_handle(), attrib, sub, len(data), cdata)
 
     def get_attribute_data(self, attrib, sub):
@@ -183,6 +181,16 @@ class TspiPCRs(TspiObject):
         for pcr in pcrs:
             tss_lib.Tspi_PcrComposite_SelectPcrIndex(self.handle[0], ffi.cast('UINT32',pcr))
             self.pcrs[pcr] = ""
+
+    def set_pcr_values(self, pcr_values):
+        """
+        Set the PCRs referred to by this object
+
+        :param pcrs: A dictionary of PCR indices and their values
+        """
+        for pcr, value in pcr_values.iteritems():
+            tss_lib.Tspi_PcrComposite_SetPcrValue(self.handle[0], ffi.cast('UINT32',pcr), ffi.cast('UINT32', len(value)), _c_byte_array(value))
+            self.pcrs[pcr] = value
 
     def get_pcrs(self):
         """
@@ -355,7 +363,7 @@ class TspiKey(TspiObject):
         Seal data to the local TPM using this key
 
         :param data: The data to seal
-        :param pcrs: A list of PCRs to seal the data to
+        :param pcrs: A dictionary of PCR index:value pairs to seal the data to
 
         :returns: a bytearray of the encrypted data
         """
@@ -365,7 +373,7 @@ class TspiKey(TspiObject):
 
         if pcrs is not None:
             pcrobj=TspiPCRs(self.context, tss_lib.TSS_PCRS_STRUCT_INFO)
-            pcrobj.set_pcrs(pcrs)
+            pcrobj.set_pcr_values(pcrs)
             pcr_composite = pcrobj.get_handle()
         else:
             pcr_composite = 0
